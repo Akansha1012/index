@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>Goa Cost Sheets Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+/* Layout: plot picker rail on the left, pricing console + live A4 preview on the right; stacks on phones. */
+:root{
+  --bg:#F3F5F2; --surface:#FFFFFF; --ink:#14211D; --muted:#5D6B66; --line:#DCE2DE;
+  --accent:#17624F; --accent-ink:#FFFFFF; --accent-soft:#E2EFEA; --sun:#C98A12; --sun-soft:#FBF1DC;
+  --warn:#B4441F; --warn-soft:#FBE7DF; --ok:#1E7A4C;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  /* printed-paper tokens: the cost sheet always prints light */
+  --p-bg:#FFFFFF; --p-ink:#16201D; --p-muted:#5F6B67; --p-line:#D9DFDB; --p-band:#17624F; --p-band-ink:#FFFFFF; --p-tint:#EEF4F1; --p-gold:#9A6A0C;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0E1513; --surface:#16201D; --ink:#E6ECE9; --muted:#97A59F; --line:#2A3632;
+  --accent:#4FB394; --accent-ink:#0B1411; --accent-soft:#1B312A; --sun:#E7B04A; --sun-soft:#33291A;
+  --warn:#EE8A68; --warn-soft:#3A2119; --ok:#5CC48E; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0E1513; --surface:#16201D; --ink:#E6ECE9; --muted:#97A59F; --line:#2A3632;
+  --accent:#4FB394; --accent-ink:#0B1411; --accent-soft:#1B312A; --sun:#E7B04A; --sun-soft:#33291A;
+  --warn:#EE8A68; --warn-soft:#3A2119; --ok:#5CC48E; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.45}
+.wrap{max-width:1360px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 40px}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.top{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 20px;margin-bottom:16px}
+.top h1{font-family:var(--display);font-weight:700;font-size:26px;letter-spacing:-.01em;margin:0;text-wrap:balance}
+.top h1 span{color:var(--accent)}
+.top p{margin:0;color:var(--muted);font-size:13px}
+
+.grid{display:grid;grid-template-columns:330px minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+
+/* picker */
+.picker{background:var(--surface);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;min-width:0;position:sticky;top:12px;max-height:calc(100vh - 24px)}
+@media (max-width:900px){.picker{position:static;max-height:none}}
+.pk-head{padding:14px;display:grid;gap:10px;border-bottom:1px solid var(--line)}
+.lbl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.search{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:transparent;border-radius:999px;padding:4px 11px;font-size:12.5px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.sel{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.pk-count{font-size:12px;color:var(--muted)}
+.list{overflow:auto;padding:6px;display:grid;gap:2px;align-content:start}
+@media (max-width:900px){.list{max-height:320px}}
+.item{display:grid;grid-template-columns:1fr auto;gap:2px 10px;text-align:left;border:1px solid transparent;background:transparent;border-radius:8px;padding:8px 10px;cursor:pointer}
+.item:hover{background:var(--bg)}
+.item[aria-selected="true"]{background:var(--accent-soft);border-color:var(--accent)}
+.item b{font-family:var(--mono);font-weight:500;font-size:14px}
+.item .meta{grid-column:1/2;font-size:12px;color:var(--muted)}
+.item .px{font-family:var(--mono);font-size:13px;text-align:right}
+.item .tags{grid-column:2/3;display:flex;gap:4px;justify-content:flex-end}
+.tag{font-size:10.5px;padding:1px 6px;border-radius:4px;background:var(--bg);color:var(--muted);white-space:nowrap}
+.tag.offer{background:var(--sun-soft);color:var(--sun)}
+.item.blk{opacity:.55}
+.item.blk .px{text-decoration:line-through}
+.tag.blk{background:var(--warn-soft);color:var(--warn);font-weight:600}
+.tag.prop{background:var(--warn-soft);color:var(--warn)}
+
+/* console */
+.work{display:grid;gap:18px;min-width:0}
+.console{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;display:grid;gap:16px;min-width:0}
+.plothead{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px}
+.plothead h2{font-family:var(--display);font-size:30px;margin:0;font-weight:700;letter-spacing:-.01em}
+.plothead .facts{color:var(--muted);font-size:13px}
+.allin{display:grid;gap:8px}
+.allin-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.field{display:flex;align-items:center;border:2px solid var(--accent);border-radius:10px;background:var(--bg);padding:0 12px;min-width:0;flex:1 1 300px;max-width:420px}
+.field span{font-family:var(--display);font-size:26px;color:var(--accent)}
+.field input{border:0;background:transparent;font-family:var(--mono);font-size:26px;padding:8px 6px;width:100%;min-width:0;outline:none}
+.words{font-family:var(--display);font-size:20px;color:var(--muted)}
+.hint{font-size:12px;color:var(--muted)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.quick{display:flex;flex-wrap:wrap;gap:6px}
+.qb{border:1px solid var(--line);background:var(--bg);border-radius:7px;padding:5px 10px;font-size:12.5px;cursor:pointer}
+.qb:hover{border-color:var(--accent);color:var(--accent)}
+.readout{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+@media (max-width:640px){.readout{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.ro{padding:10px 12px;border-right:1px solid var(--line);display:grid;gap:2px;min-width:0}
+.ro:last-child{border-right:0}
+@media (max-width:640px){.ro:nth-child(2){border-right:0}.ro:nth-child(-n+2){border-bottom:1px solid var(--line)}}
+.ro .v{font-family:var(--mono);font-size:16px;font-weight:500}
+.ro .s{font-size:11.5px;color:var(--muted)}
+.ro.hl .v{color:var(--sun)}
+.floors{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--sun-soft)}
+.floors div{padding:10px 12px;border-right:1px solid var(--line);display:grid;gap:2px;min-width:0}
+.floors div:last-child{border-right:0}
+.floors b{font-family:var(--mono);font-size:16px;font-weight:500}
+.floors span{font-size:11.5px;color:var(--muted)}
+@media (max-width:640px){.floors{grid-template-columns:minmax(0,1fr)}.floors div{border-right:0;border-bottom:1px solid var(--line)}}
+.status{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:flex-start;font-size:13px;padding:9px 12px;border-radius:8px;background:var(--accent-soft)}
+.status.warn{background:var(--warn-soft);color:var(--warn)}
+.status.note{background:var(--sun-soft)}
+.status i{font-style:normal;font-weight:700}
+details.names summary{cursor:pointer;font-size:13px;color:var(--muted)}
+.names-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:10px}
+.names-grid label{display:grid;gap:4px;font-size:12px;color:var(--muted)}
+.names-grid input{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.share{display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-top:1px solid var(--line);padding-top:14px}
+.btn{border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);border-radius:8px;padding:9px 16px;font-weight:600;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.toast{font-size:13px;color:var(--muted)}
+
+/* preview */
+.preview-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.preview{display:grid;gap:14px;justify-items:center;min-width:0}
+.pscale{width:100%;overflow:hidden}
+.pscale .inner{transform-origin:top left;width:794px}
+.page{width:794px;height:1123px;background:#fff;padding:34px 30px;box-shadow:0 1px 3px rgba(0,0,0,.12),0 8px 24px rgba(0,0,0,.08)}
+table.xs{border-collapse:collapse;table-layout:fixed;width:734px;font-family:"Trebuchet MS","Segoe UI",Arial,sans-serif;font-size:10.5px;color:#000;line-height:1.15}
+.xs td{border:1px solid #000;height:17px;padding:1px 4px;vertical-align:middle;white-space:nowrap;overflow:hidden}
+.xs .c{text-align:center}.xs .r{text-align:right}.xs .b{font-weight:700}
+.xs .dk{background:#404040;color:#fff;font-weight:700;text-align:center}
+.xs .gy{background:#F2F2F2}
+.xs .pc{background:#FBE3D6;font-weight:700;text-align:center}
+.xs .pk{background:#F6C6AD;font-weight:700}
+.xs .red{color:#FF0000}
+.xs .tall{height:28px}
+.xs .og{font-size:34px;font-weight:700;text-align:center}
+.xs .ar{font-family:Arial,Helvetica,sans-serif;font-size:9.5px}
+.xs td.nb{border-top:0;border-bottom:0}
+.xs td.nbr{border-right:0}.xs td.nbl{border-left:0}
+.xs td.wrap{white-space:normal}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<style>body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Goa <span>Cost Sheets</span> · Admin</h1>
+    <p id="asof"></p>
+  </header>
+  <div class="grid">
+    <aside class="picker" aria-label="Choose a plot">
+      <div class="pk-head">
+        <input id="q" class="search" type="search" placeholder="Search plot no. e.g. B-587" aria-label="Search plot number">
+        <div><div class="lbl" style="margin-bottom:6px">Project</div><div class="chips" id="projChips"></div></div>
+        <div id="phaseBox"><div class="lbl" style="margin-bottom:6px">Phase</div><div class="chips" id="phaseChips"></div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <select id="band" class="sel" aria-label="Size band"></select>
+          <select id="sort" class="sel" aria-label="Sort">
+            <option value="plot">Sort: Plot no.</option><option value="price">Sort: Price</option><option value="area">Sort: Size</option>
+          </select>
+        </div>
+        <div class="pk-count" id="count"></div>
+      </div>
+      <div class="list" id="list" role="listbox" aria-label="Available units"></div>
+    </aside>
+
+    <section class="work">
+      <div class="console">
+        <div class="plothead"><h2 id="pTitle"></h2><div class="facts" id="pFacts"></div></div>
+        <div class="allin">
+          <label class="lbl" for="allin">Set the All-In price</label>
+          <div class="allin-row">
+            <div class="field"><span>₹</span><input id="allin" inputmode="decimal" autocomplete="off"></div>
+            <div class="words" id="words"></div>
+          </div>
+          <div class="hint">Type the full amount or shorthand like <b>1.05cr</b> or <b>98L</b>, then press Enter. Offers are worked out for you.</div>
+          <div class="quick" id="quick"></div>
+        </div>
+        <div class="floors" id="floors"></div>
+        <div class="readout">
+          <div class="ro"><span class="lbl">List All-In</span><span class="v" id="rList"></span><span class="s" id="rListS"></span></div>
+          <div class="ro hl"><span class="lbl">Offer applied</span><span class="v" id="rOffer"></span><span class="s" id="rOfferS"></span></div>
+          <div class="ro"><span class="lbl">All-In / sq ft</span><span class="v" id="rPsf"></span><span class="s" id="rPsfS"></span></div>
+          <div class="ro"><span class="lbl">Agreement value</span><span class="v" id="rAv"></span><span class="s" id="rAvS"></span></div>
+        </div>
+        <div class="status" id="status"></div>
+        <div class="share">
+          <button class="btn" id="dlPng">Download price sheet</button>
+          <span class="toast" id="toast" role="status"></span>
+        </div>
+      </div>
+      <div class="preview-head"><span class="lbl">Price sheet · this is what downloads</span></div>
+      <div class="pscale" id="pscale"><div class="inner" id="pages"></div></div>
+    </section>
+  </div>
+</div>
+<script>
+const DATA={"banks":[["IMPACTUM LANDS PRIVATE LIMITED",107105005745,"ICICI","Mazgoan Branch","ICIC0001071"],["IMPACTUM LANDS PVT LTD GULF OF GOA COLLECTION AC",107105005745,"ICICI","Mazgoan Branch","ICIC0001071"],["HOABL Landbuild Pvt Ltd",50200073652402,"HDFC Bank","Churchgate","HDFC0000501"],["HOABL Landbuild Pvt Ltd",50200073649967,"HDFC Bank","Churchgate","HDFC0000501"],["HOABL IMPACTUM LAND PRIVATE LIMITED ONE GOA P2 COLLECTION AC",6650436053,"Kotak Mahindra Bank Ltd","Mumbai - Mittal Court","KKBK0000958"],[null,null,null,null,null]],"plots":[{"project":"GOG","area":1292,"band":"1200-1400","psf":10815,"infraPsf":1300,"plc":0,"spot":0,"sfc":20000,"camRate":9,"blocked":false,"plot":"T136","phase":"","bank":0,"commercial":false,"kind":"regular"},{"project":"GOG","area":2411,"band":"2400-2600","psf":10300,"infraPsf":1300,"plc":0,"spot":0,"sfc":20000,"camRate":9,"blocked":true,"plot":"T150","phase":"","bank":1,"commercial":false,"kind":"regular"},{"project":"GOG","area":2411,"band":"2400-2600","psf":10300,"infraPsf":1300,"plc":0,"spot":0,"sfc":20000,"camRate":9,"blocked":true,"plot":"T151","phase":"","bank":1,"commercial":false,"kind":"regular"},{"project":"GOG","area":2411,"band":"2400-2600","psf":10300,"infraPsf":1300,"plc":0,"spot":0,"sfc":20000,"camRate":9,"blocked":false,"plot":"T17","phase":"","bank":1,"commercial":false,"kind":"regular"},{"project":"GOG","area":2411,"band":"2400-2600","psf":10300,"infraPsf":1300,"plc":0,"spot":0,"sfc":20000,"camRate":9,"blocked":false,"plot":"T176","phase":"","bank":1,"commercial":false,"kind":"regular"},{"project":"GOG","area":2411,"band":"2400-2600","psf":10300,"infraPsf":1300,"plc":0,"spot":0,"sfc":20000,"camRate":9,"blocked":false,"plot":"T177","phase":"","bank":1,"commercial":false,"kind":"regular"},{"project":"GOG","area":2411,"band":"2400-2600","psf":10300,"infraPsf":1300,"plc":0,"spot":0,"sfc":20000,"camRate":9,"blocked":false,"plot":"T178","phase":"","bank":1,"commercial":false,"kind":"regular"},{"project":"GOG","area":4187,"band":"4000-4200","psf":9270,"infraPsf":1300,"plc":0,"spot":12429747.999999996,"sfc":20000,"camRate":9,"blocked":false,"plot":"T183","phase":"","bank":1,"commercial":false,"kind":"regular"},{"project":"GOG","area":2411,"band":"2400-2600","psf":10300,"infraPsf":1300,"plc":0,"spot":0,"sfc":20000,"camRate":9,"blocked":false,"plot":"T22","phase":"","bank":1,"commercial":false,"kind":"regular"},{"project":"GOG","area":2034,"band":"2000-2200","psf":10300,"infraPsf":1300,"plc":0,"spot":0,"sfc":20000,"camRate":9,"blocked":false,"plot":"T229","phase":"","bank":1,"commercial":false,"kind":"regular"},{"project":"GOG","area":2013,"band":"2000-2200","psf":10300,"infraPsf":1300,"plc":0,"spot":0,"sfc":20000,"camRate":9,"blocked":false,"plot":"T235","phase":"","bank":0,"commercial":false,"kind":"regular"},{"project":"GOG","area":2013,"band":"2000-2200","psf":10300,"infraPsf":1300,"plc":0,"spot":0,"sfc":20000,"camRate":9,"blocked":false,"plot":"T247","phase":"","bank":0,"commercial":false,"kind":"regular"},{"project":"GOG","area":2013,"band":"2000-2200","psf":10300,"infraPsf":1300,"plc":0,"spot":0,"sfc":20000,"camRate":9,"blocked":false,"plot":"T260","phase":"","bank":1,"commercial":false,"kind":"regular"},{"project":"GOG","area":2357,"band":"2200-2400","psf":10300,"infraPsf":1300,"plc":0,"spot":0,"sfc":20000,"camRate":9,"blocked":false,"plot":"T287","phase":"","bank":1,"commercial":false,"kind":"regular"},{"project":"GOG","area":1507,"band":"1400-1600","psf":10815,"infraPsf":1300,"plc":0,"spot":0,"sfc":20000,"camRate":9,"blocked":false,"plot":"T29","phase":"","bank":0,"commercial":false,"kind":"regular"},{"project":"GOG","area":2400,"band":"2400-2600","psf":10300,"infraPsf":1300,"plc":0,"spot":0,"sfc":20000,"camRate":9,"blocked":false,"plot":"T295","phase":"","bank":1,"commercial":false,"kind":"regular"},{"project":"GOG","area":2153,"band":"2000-2200","psf":10300,"infraPsf":1300,"plc":0,"spot":0,"sfc":20000,"camRate":9,"blocked":false,"plot":"T311","phase":"","bank":1,"commercial":false,"kind":"regular"},{"project":"GOG","area":2131,"band":"2000-2200","psf":10300,"infraPsf":1300,"plc":0,"spot":0,"sfc":20000,"camRate":9,"blocked":false,"plot":"T312","phase":"","bank":1,"commercial":false,"kind":"regular"},{"project":"GOG","area":1507,"band":"1400-1600","psf":10815,"infraPsf":1300,"plc":0,"spot":0,"sfc":20000,"camRate":9,"blocked":false,"plot":"T37","phase":"","bank":0,"commercial":false,"kind":"regular"},{"project":"GOG","area":1507,"band":"1400-1600","psf":10815,"infraPsf":1300,"plc":0,"spot":0,"sfc":20000,"camRate":9,"blocked":false,"plot":"T43","phase":"","bank":0,"commercial":false,"kind":"regular"},{"project":"GOG","area":1507,"band":"1400-1600","psf":10815,"infraPsf":1300,"plc":0,"spot":4626343,"sfc":20000,"camRate":9,"blocked":true,"plot":"T92","phase":"","bank":0,"commercial":false,"kind":"regular"},{"project":"IG","area":3229,"band":"3200-3400","psf":11033.36,"infraPsf":1000,"plc":0,"spot":0,"sfc":20000,"camRate":6,"blocked":false,"plot":"14 Commercial","phase":"","bank":2,"commercial":true,"kind":"regular"},{"project":"IG","area":3208,"band":"3200-3400","psf":11033.36,"infraPsf":1000,"plc":0,"spot":0,"sfc":20000,"camRate":6,"blocked":false,"plot":"15 Commercial","phase":"","bank":2,"commercial":true,"kind":"regular"},{"project":"IG","area":3208,"band":"3200-3400","psf":11033.36,"infraPsf":1000,"plc":0,"spot":0,"sfc":20000,"camRate":6,"blocked":false,"plot":"16 Commercial","phase":"","bank":2,"commercial":true,"kind":"regular"},{"project":"IG","area":3229,"band":"3200-3400","psf":11033.36,"infraPsf":1000,"plc":0,"spot":0,"sfc":20000,"camRate":6,"blocked":false,"plot":"17 Commercial","phase":"","bank":2,"commercial":true,"kind":"regular"},{"project":"IG","area":3272,"band":"3200-3400","psf":11033.36,"infraPsf":1000,"plc":0,"spot":0,"sfc":20000,"camRate":6,"blocked":false,"plot":"110","phase":"","bank":3,"commercial":false,"kind":"regular"},{"project":"IG","area":3068,"band":"3000-3200","psf":11141.372621903552,"infraPsf":1000,"plc":0,"spot":0,"sfc":20000,"camRate":6,"blocked":false,"plot":"12","phase":"","bank":3,"commercial":false,"kind":"regular"},{"project":"IG","area":3068,"band":"3000-3200","psf":11141.372621903552,"infraPsf":1000,"plc":0,"spot":0,"sfc":20000,"camRate":6,"blocked":false,"plot":"13","phase":"","bank":3,"commercial":false,"kind":"regular"},{"project":"IG","area":5274,"band":"5200-5400","psf":10078.550000000001,"infraPsf":1000,"plc":0,"spot":0,"sfc":20000,"camRate":6,"blocked":false,"plot":"152","phase":"","bank":2,"commercial":false,"kind":"regular"},{"project":"IG","area":3068,"band":"3000-3200","psf":11141.372621903552,"infraPsf":1000,"plc":0,"spot":0,"sfc":20000,"camRate":6,"blocked":false,"plot":"22","phase":"","bank":2,"commercial":false,"kind":"regular"},{"project":"IG","area":4166,"band":"4000-4200","psf":10343.775,"infraPsf":1000,"plc":0,"spot":0,"sfc":20000,"camRate":6,"blocked":false,"plot":"56","phase":"","bank":3,"commercial":false,"kind":"regular"},{"project":"IG","area":4252,"band":"4200-4400","psf":10343.775,"infraPsf":1000,"plc":0,"spot":0,"sfc":20000,"camRate":6,"blocked":false,"plot":"65","phase":"","bank":3,"commercial":false,"kind":"regular"},{"project":"IG","area":2885,"band":"2800-3000","psf":11141.372621903552,"infraPsf":1000,"plc":0,"spot":0,"sfc":20000,"camRate":6,"blocked":false,"plot":"80","phase":"","bank":3,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-013","phase":"A","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":1383200,"sfc":15000,"camRate":8,"blocked":true,"plot":"A-022","phase":"A","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":2917,"band":"2800-3000","psf":5400,"infraPsf":840,"plc":0,"spot":5814356,"sfc":15000,"camRate":8,"blocked":true,"plot":"A-042","phase":"A","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1238,"band":"1200-1400","psf":5741.5460368294625,"infraPsf":840,"plc":0,"spot":700000,"sfc":15000,"camRate":8,"blocked":true,"plot":"A-128","phase":"A","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-164","phase":"A","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-166","phase":"A","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-174","phase":"A","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-175","phase":"A","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-176","phase":"A","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-182","phase":"A","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":1941400.0000000023,"sfc":15000,"camRate":8,"blocked":true,"plot":"A-204","phase":"A","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":2318975.000000001,"sfc":15000,"camRate":8,"blocked":true,"plot":"A-311","phase":"A","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":2884,"band":"2800-3000","psf":5400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-530","phase":"A","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":2421,"band":"2400-2600","psf":5400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-538","phase":"A","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1571,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-550","phase":"A","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":2174,"band":"2000-2200","psf":5500,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-561","phase":"A","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1733,"band":"1600-1800","psf":5680.404808317088,"infraPsf":840,"plc":0,"spot":4070991.532813513,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-045","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1249,"band":"1200-1400","psf":5741.5460368294625,"infraPsf":840,"plc":0,"spot":1846703.9999999988,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-047","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1249,"band":"1200-1400","psf":5741.5460368294625,"infraPsf":840,"plc":0,"spot":1203699.9999999993,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-176","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1970,"band":"1600-1800","psf":5680.404808317088,"infraPsf":840,"plc":0,"spot":1915461.4723846628,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-204","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1249,"band":"1200-1400","psf":5741.5460368294625,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-261","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":1537000.000000001,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-306","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":2572,"band":"2400-2600","psf":5400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-366","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1894,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-435","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1184,"band":"1200-1400","psf":5741.5460368294625,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-441","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-444","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-445","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-446","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-447","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-448","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":3282,"band":"3200-3400","psf":5400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-449","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":3401,"band":"3400-3600","psf":5400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-450","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":2012,"band":"2000-2200","psf":5500,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-466","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1442,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-467","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1786,"band":"1600-1800","psf":5680.404808317088,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-476","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-481","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-539","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-540","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1528,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-577","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1528,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-578","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-579","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-580","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-582","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":1755400.0000000026,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-584","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1550,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":1223875.0422352173,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-587","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1571,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-588","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1571,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-589","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1862,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-590","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":2421,"band":"2400-2600","psf":5400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-591","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-630","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-631","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-634","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-662","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-663","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":2562,"band":"2400-2600","psf":5400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-664","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":2002,"band":"2000-2200","psf":5500,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-665","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-667","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-732","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-007","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":2023,"band":"2000-2200","psf":5500,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-012","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":2023,"band":"2000-2200","psf":5500,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-013","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":2421,"band":"2400-2600","psf":5400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-056","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1248,"band":"1200-1400","psf":5741.5460368294625,"infraPsf":840,"plc":0,"spot":1383967.4539631684,"sfc":15000,"camRate":8,"blocked":true,"plot":"C-072","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1259,"band":"1200-1400","psf":5741.5460368294625,"infraPsf":840,"plc":0,"spot":1861489.4603682887,"sfc":15000,"camRate":8,"blocked":true,"plot":"C-076","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":2100000,"sfc":15000,"camRate":8,"blocked":true,"plot":"C-114","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1248,"band":"1200-1400","psf":5741.5460368294625,"infraPsf":840,"plc":0,"spot":1200000,"sfc":15000,"camRate":8,"blocked":true,"plot":"C-128","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1248,"band":"1200-1400","psf":5741.5460368294625,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-132","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1302,"band":"1200-1400","psf":5741.5460368294625,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-157","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-165","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-166","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-167","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-168","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-169","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-170","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":1676600,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-171","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-174","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-175","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-176","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-177","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-178","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-179","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-180","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-185","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-186","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-187","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-188","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-189","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1388,"band":"1200-1400","psf":5741.5460368294625,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-196","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1367,"band":"1200-1400","psf":5741.5460368294625,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-197","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":2131,"band":"2000-2200","psf":5500,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-204","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-206","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-207","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-208","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-212","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-213","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-214","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-215","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-219","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1463,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-220","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1840,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-254","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-256","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-259","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-260","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-263","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-264","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-267","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-268","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-269","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-272","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-273","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-274","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-277","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-278","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-285","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-286","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-287","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-290","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-291","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-299","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-303","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-307","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-310","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-311","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-314","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-315","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-318","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-322","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-323","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-326","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-334","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-335","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-735","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":1770700,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-563","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":3240,"band":"3200-3400","psf":5400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-040","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":2422,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":1590987,"sfc":15000,"camRate":8,"blocked":true,"plot":"A-372","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2422,"band":"VP 2400-2600 BB","psf":7425.191164327002,"infraPsf":840,"plc":0,"spot":4537099.999999999,"sfc":15000,"camRate":8,"blocked":true,"plot":"A-371","phase":"","bank":4,"commercial":false,"kind":"bb"},{"project":"OG","area":2422,"band":"VP 2400-2600 BB","psf":7425.191164327002,"infraPsf":840,"plc":0,"spot":2222200.0000000005,"sfc":15000,"camRate":8,"blocked":true,"plot":"A-364","phase":"","bank":4,"commercial":false,"kind":"bb"},{"project":"OG","area":2422,"band":"VP 2400-2600 BB","psf":7425.191164327002,"infraPsf":840,"plc":0,"spot":2222199.9999999986,"sfc":15000,"camRate":8,"blocked":true,"plot":"A-365","phase":"","bank":4,"commercial":false,"kind":"bb"},{"project":"OG","area":2422,"band":"VP 2400-2600 BB","psf":7425.191164327002,"infraPsf":840,"plc":0,"spot":2314800,"sfc":15000,"camRate":8,"blocked":true,"plot":"A-366","phase":"","bank":4,"commercial":false,"kind":"bb"},{"project":"OG","area":2422,"band":"VP 2400-2600 BB","psf":7425.191164327002,"infraPsf":840,"plc":0,"spot":3703799.9999999977,"sfc":15000,"camRate":8,"blocked":true,"plot":"A-368","phase":"A","bank":4,"commercial":false,"kind":"bb"},{"project":"OG","area":2422,"band":"VP 2400-2600 BB","psf":7425.191164327002,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":true,"plot":"A-369","phase":"","bank":4,"commercial":false,"kind":"bb"},{"project":"OG","area":2422,"band":"VP 2400-2600 BB","psf":7425.191164327002,"infraPsf":840,"plc":0,"spot":2777799.9999999967,"sfc":15000,"camRate":8,"blocked":true,"plot":"A-370","phase":"","bank":4,"commercial":false,"kind":"bb"},{"project":"OG","area":2422,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-373","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2422,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-374","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2422,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":2146687,"sfc":15000,"camRate":8,"blocked":true,"plot":"A-375","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2422,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-376","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2422,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-377","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2422,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-378","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2422,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-379","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2422,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-380","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2422,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-381","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2422,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-382","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2422,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-383","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2433,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-384","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2433,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-385","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2422,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":665087,"sfc":15000,"camRate":8,"blocked":true,"plot":"A-386","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2422,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":2146687,"sfc":15000,"camRate":8,"blocked":true,"plot":"A-387","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2422,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":1683687.0000000002,"sfc":15000,"camRate":8,"blocked":true,"plot":"A-388","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2422,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-389","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2422,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-390","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2422,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-391","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2422,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-392","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2422,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-393","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2422,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":3257686.9999999995,"sfc":15000,"camRate":8,"blocked":true,"plot":"A-394","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2422,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":3257686.9999999995,"sfc":15000,"camRate":8,"blocked":true,"plot":"A-395","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2486,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":2500000,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-228","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2002,"band":"VP 2000-2200","psf":6371.786713286714,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-229","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2002,"band":"VP 2000-2200","psf":6371.786713286714,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-230","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2486,"band":"VP 2400-2600","psf":6400,"infraPsf":840,"plc":0,"spot":2429823,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-231","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2002,"band":"VP 2000-2200","psf":6371.786713286714,"infraPsf":840,"plc":0,"spot":2720317,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-232","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2002,"band":"VP 2000-2200","psf":6371.786713286714,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-233","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2002,"band":"VP 2000-2200","psf":6371.786713286714,"infraPsf":840,"plc":0,"spot":2720300,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-234","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2002,"band":"VP 2000-2200","psf":6371.786713286714,"infraPsf":840,"plc":0,"spot":2720300,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-235","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2002,"band":"VP 2000-2200","psf":6371.786713286714,"infraPsf":840,"plc":0,"spot":2720317,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-236","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2002,"band":"VP 2000-2200","psf":6371.786713286714,"infraPsf":840,"plc":0,"spot":2720317,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-237","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2002,"band":"VP 2000-2200","psf":6371.786713286714,"infraPsf":840,"plc":0,"spot":2720300,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-238","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2002,"band":"VP 2000-2200","psf":6371.786713286714,"infraPsf":840,"plc":0,"spot":868500,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-239","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2002,"band":"VP 2000-2200","psf":6371.786713286714,"infraPsf":840,"plc":0,"spot":2396000,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-240","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2002,"band":"VP 2000-2200","psf":6371.786713286714,"infraPsf":840,"plc":0,"spot":2627000,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-241","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2002,"band":"VP 2000-2200","psf":6371.786713286714,"infraPsf":840,"plc":0,"spot":2720317,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-242","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2002,"band":"VP 2000-2200","psf":6371.786713286714,"infraPsf":840,"plc":0,"spot":1794400,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-243","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2002,"band":"VP 2000-2200","psf":6371.786713286714,"infraPsf":840,"plc":0,"spot":2720300,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-244","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2002,"band":"VP 2000-2200","psf":6371.786713286714,"infraPsf":840,"plc":0,"spot":2952800.0000000014,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-245","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2002,"band":"VP 2000-2200","psf":6371.786713286714,"infraPsf":840,"plc":0,"spot":2766700,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-246","phase":"B","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2002,"band":"VP 2000-2200","psf":6371.786713286714,"infraPsf":840,"plc":0,"spot":1701900,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-247","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2002,"band":"VP 2000-2200","psf":6371.786713286714,"infraPsf":1680,"plc":0,"spot":3496386,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-248","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2002,"band":"VP 2000-2200","psf":6371.786713286714,"infraPsf":840,"plc":0,"spot":2720317,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-249","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":2002,"band":"VP 2000-2200","psf":6371.786713286714,"infraPsf":840,"plc":0,"spot":2720300,"sfc":15000,"camRate":8,"blocked":true,"plot":"B-250","phase":"","bank":4,"commercial":false,"kind":"crown"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":3585000,"sfc":15000,"camRate":8,"blocked":true,"plot":"A-315","phase":"A","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1248,"band":"1200-1400","psf":5741.5460368294625,"infraPsf":840,"plc":0,"spot":1383967,"sfc":15000,"camRate":8,"blocked":true,"plot":"A-446","phase":"A","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1851,"band":"1800-2000","psf":5515.822798487305,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"A-169","phase":"A","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-401","phase":"B","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":1539,"band":"1400-1600","psf":5642.912930474334,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"C-298","phase":"C","bank":4,"commercial":false,"kind":"regular"},{"project":"OG","area":2422,"band":"2400-2600","psf":5400,"infraPsf":840,"plc":0,"spot":0,"sfc":15000,"camRate":8,"blocked":false,"plot":"B-365","phase":"B","bank":4,"commercial":false,"kind":"regular"}]};
+// ===== Pricing engine: mirrors Pricesheets_Plots(WIP) + Inventory Sheet_Plots =====
+const RULES = {
+  incidental: 50000, gst: 0.18, regRate: 0.03, tds: 0.01, clubHouse: 900000, camMonths: 60, corpusMonths: 12,
+  sdSlabs: [[50000001, 0.06], [10000001, 0.05], [7500001, 0.045], [5000001, 0.04], [0, 0.03]]
+};
+const ceilTo = (x, step) => Math.ceil(Math.round(x * 1e4) / 1e4 / step) * step;
+const sdRate = av => RULES.sdSlabs.find(([lo]) => av >= lo)[1];
+function costSheet(p, av) {
+  const plotValue = p.psf * p.area, plc = p.plc || 0;
+  const offers = plotValue + plc - av;
+  const infra = p.infraPsf * p.area, infraGst = Math.ceil(Math.round(infra * RULES.gst * 1e4) / 1e4);
+  const cv = av + infra;
+  const rate = sdRate(av);
+  const stamp = ceilTo(rate * av, 100), reg = ceilTo(RULES.regRate * av, 100);
+  const inc = RULES.incidental, incGst = inc * RULES.gst, sfc = p.sfc, sfcGst = sfc * RULES.gst;
+  const allIn = cv + infraGst + stamp + reg + inc + incGst + sfc + sfcGst;
+  const cam = p.camRate * RULES.camMonths * p.area, corpus = p.camRate * RULES.corpusMonths * p.area;
+  return { plotValue, plc, offers, av, infra, infraGst, cv, rate, stamp, reg, inc, incGst, sfc, sfcGst, allIn,
+    cam, camGst: Math.ceil(cam * RULES.gst), corpus, corpusGst: Math.ceil(corpus * RULES.gst) };
+}
+// Payment schedules exactly as in each project's price sheet
+const SCHEDULES = {
+  OG: { ba1: 45000, blankRow: true, rows: [
+    ["Booking Amount 1 (BA1) : On Application"], ["Booking Amount 2 (BA2) : On Allocation within 7 days"],
+    ["Receipt of OC or March 2027, whichever is later", 0.151], ["Initiation of Possession or 31st July 2027, whichever is later", 0.75] ] },
+  IG: { ba1: 200000, rows: [
+    ["Booking Amount 1 (BA1) : On Application"], ["Booking Amount 2 (BA2) : On Allocation within 7 days"],
+    ["60 Days from BA2", 0.151], ["120 Days from BA2", 0.10], ["180 Days from BA2", 0.10], ["270 Days from BA2", 0.55] ] }
+};
+SCHEDULES.GOG = SCHEDULES.IG;
+function schedule(c, project) {
+  const S0 = SCHEDULES[project], ba1 = S0.ba1, ba2 = 0.099 * c.cv - ba1, last = S0.rows.length - 1;
+  return S0.rows.map(([m, share], i) => {
+    if (i === 0) return { m, amt: ba1, gst: 0, tds: RULES.tds * (ba1 + ba2), pay: ba1 };
+    if (i === 1) return { m, amt: ba2, gst: 0, tds: 0, pay: ba2 - RULES.tds * (ba1 + ba2) };
+    const amt = share * c.cv, gst = i === last ? c.infraGst : 0, tds = RULES.tds * amt;
+    return { m, share, amt, gst, tds, pay: amt + gst - tds };
+  });
+}
+const listAV = p => p.psf * p.area + (p.plc || 0);            // no offers at all
+const currentAV = p => listAV(p) - (p.spot || 0);             // with offers already in inventory
+// Find the agreement value whose All-In lands on target (never above it).
+function solve(p, target) {
+  const maxAV = listAV(p), maxC = costSheet(p, maxAV);
+  if (target >= maxC.allIn) return { c: maxC, capped: target > maxC.allIn + 0.5, exact: Math.abs(target - maxC.allIn) < 1 };
+  let lo = 0, hi = Math.floor(maxAV);
+  if (costSheet(p, lo).allIn > target) return null;
+  while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (costSheet(p, mid).allIn <= target) lo = mid; else hi = mid - 1; }
+  const c = costSheet(p, lo);
+  return { c, capped: false, exact: Math.abs(c.allIn - target) < 1 };
+}
+
+
+const CONFIG = {
+  inventoryAsOf: "27 Oct 2026",
+  priceQuarter: "Q3 FY27",
+  // Default price = the "Discounted" sourcing price. For each sourcing SKU: list All-In (no clubhouse) and its discounted All-In.
+  // Plots between two SKU sizes get a proportional discount; outside the range they use the nearest SKU.
+  // One Goa regular plots: plot value = area x base PSF for the size band
+  basePsf: { "1000-1200": 5743, "1200-1400": 5742, "1400-1600": 5643, "1600-1800": 5680, "1800-2000": 5516,
+             "2000-2200": 5500, "2400-2600": 5400, "2800-3000": 5400, "3200-3400": 5400, "3400-3600": 5400 },
+  skus: {
+    "OG-regular": [ { area: 1249, band: "1200-1400", discounted: 8000000 },
+                    { area: 1539, band: "1400-1600", discounted: 9990000 },
+                    { area: 1851, band: "1800-2000", discounted: 12000000 } ],
+    "OG-crown":   [ { area: 2002, list: 15838000, discounted: 14900000 },
+                    { area: 2422, list: 19218387, discounted: 17900000 } ],
+    "OG-bb":      [ { area: 2422, list: 21900000, discounted: 19956000 } ],
+    "IG-regular": [ { area: 3068, list: 40619171, discounted: 39500000 } ],
+    "GOG-regular":[ { area: 2013, list: 25563242, discounted: 24900000 } ]
+  },
+  // Actual lowest All-In (closing-team primer). Listed SKU sizes use the primer number. Other sizes:
+  // One Goa regular / Crown = area x PSF; BB, Imperial and Gulf = discounted price x (SKU lowest / SKU discounted).
+  // Rounded up to the next ₹10,000. TLs can never go below this.
+  actualFloor: {
+    "OG-regular":  { psf: 6000, skus: { 1249: 7500000, 1539: 9250000, 1851: 11000000 } },
+    "OG-crown":    { psf: 6900, skus: { 2002: 13800000, 2422: 16800000 } },
+    "OG-bb":       { ratio: 19500000 / 19956000, skus: { 2422: 19500000 } },
+    "IG-regular":  { ratio: 39000000 / 39500000, skus: { 3068: 39000000 } },
+    "GOG-regular": { ratio: 24550000 / 24900000, skus: { 2013: 24550000 } }
+  },
+  extraDiscount: 0.03,    // TLs may go this far below the discounted price, never further (kept hidden)
+  roundTo: 10000,         // discounted price and floor rounded to the nearest ₹10,000
+  projects: {
+    OG:  { name: "One Goa", tds: { name: "ERRICHTER INFRA PRIVATE LIMITED", pan: "AAGCE9190G",
+           site: "Survey No. 148/0 , Carapur, Bicholim, North Goa.",
+           office: "701 Unit, 7th Floor 1 Aerocity Building, NIBR Compound, Mohili Village, Safed Pool, Sakinaka, Mumbai-400072" } },
+    IG:  { name: "Imperial Goa", tds: { name: "HOABL Landbuild Private Limited", pan: "AAICV4566D",
+           site: "20/1-A of Village Bainguinim , Taluka Tiswadi, District of North Goa, State of Goa, Tiswadi, North Goa, Goa-403402",
+           office: "7th Floor 1 Aerocity Building NIBR Compound, Mohili Village, Sakinaka, Safed Pool, Mumbai-400072" } },
+    GOG: { name: "Gulf of Goa", tds: { name: "HOABL Impactum Land Private Limited", pan: "AAGCI4909R",
+           site: "178/1-A-Q-3, Sancoale, Mormugao, South Goa, Vasco da Gama, Goa-403726",
+           office: "7th Floor 1 Aerocity Building NIBR Compound, Mohili Village, Sakinaka, Safed Pool, Mumbai-400072" } }
+  }
+};
+const $ = id => document.getElementById(id);
+const r0 = n => Math.round(n);
+const inr = n => (n < 0 ? "−" : "") + "₹" + Math.abs(r0(n)).toLocaleString("en-IN");
+const inrN = n => (n < 0 ? "−" : "") + Math.abs(r0(n)).toLocaleString("en-IN");
+const cr = n => n >= 1e7 ? "₹" + (n / 1e7).toFixed(2) + " Cr" : "₹" + (n / 1e5).toFixed(2) + " L";
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const plots = DATA.plots;
+const ogTemplate = { project: "OG", infraPsf: 840, plc: 0, spot: 0, sfc: 15000, camRate: 8 };
+const skuList = k => k.list ?? costSheet({ ...ogTemplate, area: k.area, psf: CONFIG.basePsf[k.band] }, k.area * CONFIG.basePsf[k.band]).allIn;
+function discRatio(p) {
+  const pts = CONFIG.skus[p.project + "-" + p.kind].map(k => [k.area, k.discounted / skuList(k)]);
+  if (p.area <= pts[0][0]) return pts[0][1];
+  const last = pts[pts.length - 1]; if (p.area >= last[0]) return last[1];
+  for (let i = 0; i < pts.length - 1; i++) { const [x0, y0] = pts[i], [x1, y1] = pts[i + 1]; if (p.area <= x1) return y0 + (y1 - y0) * (p.area - x0) / (x1 - x0); }
+}
+const roundTo = n => Math.round(n / CONFIG.roundTo) * CONFIG.roundTo;
+plots.forEach(p => {
+  p.id = p.project + ":" + p.plot;
+  if (p.project === "OG" && p.kind === "regular" && CONFIG.basePsf[p.band]) p.psf = CONFIG.basePsf[p.band];
+  p.spot = 0;                                   // inventory spot offers are ignored
+  p.listAllIn = costSheet(p, listAV(p)).allIn; p.curAllIn = costSheet(p, currentAV(p)).allIn;
+  const disc = roundTo(p.listAllIn * discRatio(p));
+  p.defAllIn = disc;                                                  // starting price shown to TLs
+  const af = CONFIG.actualFloor[p.project + "-" + p.kind];
+  p.actualFloor = af.skus[p.area] ?? Math.ceil((af.psf ? p.area * af.psf : disc * af.ratio) / 10000) * 10000;  // real bottom All-In
+  p.minAllIn = Math.max(roundTo(disc * (1 - CONFIG.extraDiscount)), p.actualFloor);                         // TL floor
+});
+// smallest agreement value whose All-In is at least `min`
+function atLeast(p, min) { let lo = 0, hi = Math.floor(listAV(p)); while (lo < hi) { const m = Math.floor((lo + hi) / 2); if (costSheet(p, m).allIn >= min) hi = m; else lo = m + 1; } return costSheet(p, lo); }
+
+const S = { project: "OG", phase: "All", band: "All", q: "", sort: "plot", sel: null, target: null };
+
+$("asof").textContent = `Inventory as of ${CONFIG.inventoryAsOf} · ${CONFIG.priceQuarter} pricing · ${plots.filter(p => !p.blocked).length} units available`;
+$("projChips").innerHTML = Object.entries(CONFIG.projects).map(([k, v]) => `<button class="chip" data-pj="${k}" aria-pressed="${k === S.project}">${v.name}</button>`).join("");
+$("projChips").onclick = e => { const b = e.target.closest("[data-pj]"); if (!b) return; S.project = b.dataset.pj; S.phase = "All"; S.band = "All";
+  [...$("projChips").children].forEach(c => c.setAttribute("aria-pressed", c === b)); filters(); renderList(); };
+$("phaseChips").onclick = e => { const b = e.target.closest("[data-ph]"); if (!b) return; S.phase = b.dataset.ph; [...$("phaseChips").children].forEach(c => c.setAttribute("aria-pressed", c === b)); renderList(); };
+function filters() {
+  const mine = plots.filter(p => p.project === S.project);
+  const phases = [...new Set(mine.map(p => p.phase).filter(Boolean))].sort();
+  $("phaseBox").hidden = phases.length < 2;
+  $("phaseChips").innerHTML = ["All", ...phases].map(p => `<button class="chip" data-ph="${p}" aria-pressed="${p === S.phase}">${p}</button>`).join("");
+  const bands = [...new Set(mine.map(p => p.band))].sort((a, b) => parseInt(a.replace(/\D+/, "")) - parseInt(b.replace(/\D+/, "")));
+  $("band").innerHTML = `<option value="All">All sizes</option>` + bands.map(b => `<option>${b}</option>`).join("");
+}
+filters();
+$("band").onchange = e => { S.band = e.target.value; renderList(); };
+$("sort").onchange = e => { S.sort = e.target.value; renderList(); };
+$("q").oninput = e => { S.q = e.target.value.trim().toUpperCase().replace(/\s/g, ""); renderList(); };
+
+function renderList() {
+  let L = plots.filter(p => p.project === S.project && (S.phase === "All" || p.phase === S.phase) && (S.band === "All" || p.band === S.band)
+    && (!S.q || p.plot.replace("-", "").includes(S.q.replace("-", ""))));
+  L.sort(S.sort === "price" ? (a, b) => a.defAllIn - b.defAllIn : S.sort === "area" ? (a, b) => a.area - b.area : (a, b) => a.plot.localeCompare(b.plot, undefined, { numeric: true }));
+  L.sort((a, b) => a.blocked - b.blocked);
+  $("count").textContent = `${L.filter(p => !p.blocked).length} available · ${L.filter(p => p.blocked).length} blocked`;
+  $("list").innerHTML = L.map(p => `<button class="item${p.blocked ? " blk" : ""}" role="option" data-id="${p.id}" aria-selected="${S.sel && S.sel.id === p.id}">
+      <b>${p.plot}</b>${p.blocked ? '<span class="tags"><span class="tag blk">Blocked</span></span>' : `<span class="px">${cr(p.defAllIn)}</span>`}
+      <span class="meta">${p.area.toLocaleString("en-IN")} sq ft${p.phase ? " · Phase " + p.phase : ""}</span>
+    </button>`).join("") || `<p class="hint" style="padding:12px">No plots match. Clear a filter to see more.</p>`;
+}
+$("list").onclick = e => { const b = e.target.closest("[data-id]"); if (b) pick(b.dataset.id); };
+
+function pick(id) {
+  S.sel = plots.find(p => p.id === id); const p = S.sel; S.target = p.defAllIn;
+  [...$("list").querySelectorAll(".item")].forEach(b => b.setAttribute("aria-selected", b.dataset.id === id));
+  $("pTitle").textContent = "Plot " + p.plot;
+  $("pFacts").textContent = [CONFIG.projects[p.project].name, `${p.area.toLocaleString("en-IN")} sq ft`, p.phase && `Phase ${p.phase}`].filter(Boolean).join(" · ");
+  $("floors").innerHTML = `<div><span class="lbl">Discounted price</span><b>${inr(p.defAllIn)}</b><span>TLs start here</span></div>
+    <div><span class="lbl">TL floor</span><b>${inr(p.minAllIn)}</b><span>3% below discounted, never below actual</span></div>
+    <div><span class="lbl">Actual floor</span><b>${inr(p.actualFloor)}</b><span>lowest you can close at</span></div>`;
+  if (p.blocked) {
+    R = null; $("quick").innerHTML = ""; $("allin").value = ""; $("allin").disabled = true; $("words").textContent = "";
+    if ($("floors")) $("floors").innerHTML = "";
+    for (const id of ["rList", "rOffer", "rPsf", "rAv"]) $(id).textContent = "—";
+    for (const id of ["rOfferS", "rPsfS", "rAvS"]) $(id).textContent = "";
+    $("status").className = "status warn";
+    $("status").innerHTML = `<i>!</i><span>Plot ${p.plot} is blocked for another customer. A cost sheet can't be made for this unit.</span>`;
+    $("pages").innerHTML = `<div class="page" style="display:grid;place-items:center;color:#5F6B67;font-family:var(--body);font-size:15px;text-align:center">Plot ${esc(p.plot)} is blocked.<br>Choose an available unit.</div>`;
+    fit(); $("dlPng").disabled = true; return;
+  }
+  $("allin").disabled = false;
+  $("quick").innerHTML = [["Discounted price", p.defAllIn], ["TL floor", p.minAllIn], ["Actual floor", p.actualFloor], ["List price", p.listAllIn]].map(([t, v]) => `<button class="qb" data-v="${r0(v)}">${t}</button>`).join("");
+  update();
+}
+$("quick").onclick = e => { const b = e.target.closest("[data-v]"); if (b) { S.target = +b.dataset.v; update(); } };
+function parseAmt(s) {
+  s = s.toLowerCase().replace(/[,₹\s]/g, "");
+  const m = s.match(/^(\d*\.?\d+)(cr|crore|crores|l|lac|lacs|lakh|lakhs|k)?$/); if (!m) return null;
+  const n = parseFloat(m[1]), u = m[2] || "";
+  return r0(n * (u.startsWith("c") ? 1e7 : u.startsWith("l") ? 1e5 : u === "k" ? 1e3 : 1));
+}
+$("allin").addEventListener("change", e => { const v = parseAmt(e.target.value); if (R && v === r0(R.allIn)) return; if (v) { S.target = v; } update(); });
+$("allin").addEventListener("keydown", e => { if (e.key === "Enter") e.target.dispatchEvent(new Event("change")); });
+$("allin").addEventListener("input", e => { const v = parseAmt(e.target.value); $("words").textContent = v ? cr(v) : ""; });
+
+let R = null;
+function update() {
+  const p = S.sel; if (!p || p.blocked) return;
+  const st = $("status"), target = S.target;
+  if (target < 1 || !solve(p, target)) { // admin version: no TL floor, only impossible amounts are refused
+    R = null;
+    $("allin").value = inrN(target); $("words").textContent = cr(target);
+    for (const id of ["rOffer", "rPsf", "rAv"]) $(id).textContent = "—";
+    for (const id of ["rOfferS", "rPsfS", "rAvS"]) $(id).textContent = "";
+    $("rList").textContent = inr(p.listAllIn);
+    st.className = "status warn";
+    st.innerHTML = `<i>!</i><span>${inr(target)} is too low to build a cost sheet for Plot ${p.plot}.</span>`;
+    $("pages").innerHTML = `<div class="page" style="display:grid;place-items:center;color:#5F6B67;font-family:var(--body);font-size:15px;text-align:center">Price sheet unavailable at this price.<br>Enter a valid All-In to see the sheet.</div>`;
+    fit(); $("dlPng").disabled = true; return;
+  }
+  $("dlPng").disabled = false;
+  const sol = solve(p, target);
+  R = sol.c; R.p = p; R.target = S.target;
+  $("allin").value = inrN(R.allIn); $("words").textContent = cr(R.allIn);
+  const off = R.offers, pct = off / p.listAllIn;
+  $("rList").textContent = inr(p.listAllIn); $("rListS").textContent = "";
+  $("rOffer").textContent = inr(off);
+  $("rOfferS").textContent = off > 0 ? `${(pct * 100).toFixed(1)}% of list`  : "no offer";
+  $("rPsf").textContent = inr(R.allIn / p.area); $("rPsfS").textContent = `list ${inr(p.listAllIn / p.area)}`;
+  $("rAv").textContent = inr(R.av); $("rAvS").textContent = `stamp duty slab ${(R.rate * 100).toFixed(1)}%`;
+  let cls = "status", msg;
+  if (sol.capped) { cls += " note"; msg = `<i>i</i><span>The highest All-In for this plot is the list price, ${inr(p.listAllIn)}, with no offer.</span>`; }
+  else if (!sol.exact) { cls += " note"; msg = `<i>i</i><span>${inr(S.target)} can't be hit exactly because stamp duty and registration round up to the nearest ₹100${Math.abs(S.target - R.allIn) > 1000 ? " and the stamp duty rate steps up at this value" : ""}. The closest possible All-In is <b>${inr(R.allIn)}</b>.</span>`; }
+  else if (R.allIn < p.actualFloor - 0.5) { cls += " warn"; msg = `<i>!</i><span>Cost sheet balanced at ${inr(R.allIn)}. This is below the actual floor of ${inr(p.actualFloor)}.</span>`; }
+  else if (R.allIn < p.minAllIn - 0.5) { cls += " note"; msg = `<i>i</i><span>Cost sheet balanced at ${inr(R.allIn)}. This is below the TL floor of ${inr(p.minAllIn)}.</span>`; }
+  else { msg = `<i>✓</i><span>Cost sheet balanced. All-In is exactly ${inr(R.allIn)} with an offer of ${inr(off)}.</span>`; }
+  st.className = cls; st.innerHTML = msg;
+  renderPages();
+}
+
+// Excel number format "₹"#,##0_);[Red]("₹"#,##0)
+const xl = n => { const v = Math.round(n); return v < 0 ? `<span class="red">(₹${Math.abs(v).toLocaleString("en-IN")})</span>` : `₹${v.toLocaleString("en-IN")}`; };
+const pc = n => (n * 100).toFixed(2) + "%";
+function schedRows(s, blank) {
+  const n = s.length, last = n - 1, gstSpan = last + (blank ? 1 : 0);
+  let h = `<tr><td colspan="2">${s[0].m}</td><td class="r" rowspan="2">${pc(0.099)}</td><td class="r">${xl(s[0].amt)}</td><td rowspan="${gstSpan}"></td><td class="r" rowspan="2">${xl(s[0].tds)}</td><td class="r">${xl(s[0].pay)}</td></tr>`;
+  h += `<tr><td colspan="2">${s[1].m}</td><td class="r">${xl(s[1].amt)}</td><td class="r">${xl(s[1].pay)}</td></tr>`;
+  if (blank) h += `<tr><td colspan="2"></td><td></td><td></td><td></td><td></td></tr>`;
+  for (let i = 2; i < n; i++) { const r = s[i];
+    h += `<tr><td colspan="2">${r.m}</td><td class="r">${pc(r.share)}</td><td class="r">${xl(r.amt)}</td>${i === last ? `<td class="r">${xl(r.gst)}</td>` : ""}<td class="r">${xl(r.tds)}</td><td class="r">${xl(r.pay)}</td></tr>`; }
+  return h;
+}
+function renderPages() {
+  if (!R) return;
+  const p = R.p, c = R, bank = DATA.banks[p.bank], s = schedule(c, p.project), PJ = CONFIG.projects[p.project], co = PJ.tds, SC = SCHEDULES[p.project];
+  const tdsAll = s[0].tds;
+  const td = (cls, txt = "", span = "") => `<td class="${cls}" ${span}>${txt}</td>`;
+  const totE = c.cv + c.stamp + c.reg + c.inc + c.sfc, totF = c.infraGst + c.incGst + c.sfcGst;
+  const camT = Math.round(c.cam * 0.01), corT = Math.round(c.corpus * 0.01);
+  const html = `<div class="page"><table class="xs">
+  <colgroup><col style="width:197px"><col style="width:120px"><col style="width:67px"><col style="width:103px"><col style="width:60px"><col style="width:56px"><col style="width:131px"></colgroup>
+  <tr><td class="dk" colspan="7">PRICE SHEET</td></tr>
+  <tr><td class="gy og" colspan="2" rowspan="3">${PJ.name}</td><td class="pc" colspan="5" rowspan="2">Unit Configuration</td></tr>
+  <tr></tr>
+  <tr><td class="c b" colspan="4">Plot Number</td><td class="r b">${p.plot}</td></tr>
+  <tr><td class="nbr" colspan="2"></td><td class="c b" colspan="4">Plot Area Size (in Sq Ft)</td><td class="r b">${p.area}</td></tr>
+  <tr><td class="pk c" colspan="7">Payment Schedule</td></tr>
+  <tr><td class="pk c" colspan="2">MILESTONE</td><td class="pk c">Share of CV</td><td class="pk c">Amount</td><td class="pk c">GST</td><td class="pk c">TDS</td><td class="pk c">Payment to HoABL</td></tr>
+${schedRows(s, SC.blankRow)}
+  <tr><td class="pk c" colspan="2">Total</td><td class="pk r">${pc(1)}</td><td class="pk r">${xl(c.cv)}</td><td class="pk r">${xl(c.infraGst)}</td><td class="pk r">${xl(s.reduce((a, r) => a + r.tds, 0))}</td><td class="pk r">${xl(s.reduce((a, r) => a + r.pay, 0))}</td></tr>
+  <tr><td class="nb nbr" colspan="7"></td></tr>
+  <tr><td class="pk c" colspan="7">Details</td></tr>
+  <tr><td class="c b">Payable</td><td class="c b" colspan="2">Name</td><td class="c b">Amount</td><td class="c b">GST</td><td class="c b" colspan="2">Total</td></tr>
+  <tr><td class="c b wrap" rowspan="6">Payable as per above payment Schedule</td><td class="c" colspan="2">Plot Value</td><td class="r">${xl(c.plotValue)}</td><td rowspan="3"></td><td class="r" colspan="2">${xl(c.plotValue)}</td></tr>
+  <tr><td class="c" colspan="2">Offers</td><td class="r red">${xl(c.offers)}</td><td class="r" colspan="2">${xl(c.offers)}</td></tr>
+  <tr class="tall"><td class="c tall" colspan="2">Premium Location Charges</td><td class="r">${xl(c.plc)}</td><td class="r" colspan="2">${xl(c.plc)}</td></tr>
+  <tr><td class="pk c" colspan="2">Agreement Value</td><td class="pk r">${xl(c.av)}</td><td class="pk r">${xl(0)}</td><td class="pk r" colspan="2">${xl(c.av)}</td></tr>
+  <tr><td class="c" colspan="2">Infrastructure Charges</td><td class="r">${xl(c.infra)}</td><td class="r">${xl(c.infraGst)}</td><td class="r" colspan="2">${xl(c.infra + c.infraGst)}</td></tr>
+  <tr><td class="pk c" colspan="2">Consideration Value</td><td class="pk r">${xl(c.cv)}</td><td class="pk r">${xl(c.infraGst)}</td><td class="pk r" colspan="2">${xl(c.cv + c.infraGst)}</td></tr>
+  <tr><td class="c b wrap" rowspan="3">Payable at registration</td><td class="c" colspan="2">Stamp Duty</td><td class="r">${xl(c.stamp)}</td><td rowspan="2"></td><td class="r" colspan="2">${xl(c.stamp)}</td></tr>
+  <tr><td class="c" colspan="2">Registration Charges</td><td class="r">${xl(c.reg)}</td><td class="r" colspan="2">${xl(c.reg)}</td></tr>
+  <tr><td class="c" colspan="2">Incidental Charges</td><td class="r">${xl(c.inc)}</td><td class="r">${xl(c.incGst)}</td><td class="r" colspan="2">${xl(c.inc + c.incGst)}</td></tr>
+  <tr><td class="c b wrap" rowspan="3">Payable at initiation of possession</td><td class="c" colspan="2">Society Formation Charges</td><td class="r">${xl(c.sfc)}</td><td class="r">${xl(c.sfcGst)}</td><td class="r" colspan="2">${xl(c.sfc + c.sfcGst)}</td></tr>
+  <tr><td class="c" colspan="2">Club House Charges</td><td class="r">${xl(900000)}</td><td class="r">${xl(162000)}</td><td class="r" colspan="2">${xl(1062000)}</td></tr>
+  <tr class="tall"><td class="c tall" colspan="2">Club House Charges Waiver</td><td class="r">${xl(-900000)}</td><td class="r">${xl(-162000)}</td><td class="r" colspan="2">${xl(-1062000)}</td></tr>
+  <tr><td class="pk c" colspan="3">Total</td><td class="pk r">${xl(totE)}</td><td class="pk r">${xl(totF)}</td><td class="pk r" colspan="2">${xl(c.allIn)}</td></tr>
+  <tr><td class="nb nbr" colspan="7"></td></tr>
+  <tr><td class="pk c" colspan="7">Maintenance Charges</td></tr>
+  <tr><td class="pk c">Payable</td><td class="pk c">Name</td><td class="pk c wrap" style="font-size:9.5px">No of Months</td><td class="pk c">Amount</td><td class="pk c">GST</td><td class="pk c">TDS</td><td class="pk c">Total</td></tr>
+  <tr><td class="c b wrap" rowspan="2">Payable at initiation of possession</td><td class="c">CAM for 5 Years</td><td class="c">60</td><td class="c">${xl(c.cam)}</td><td class="c">${xl(c.camGst)}</td><td class="c">${xl(camT)}</td><td class="c b">${xl(c.cam + c.camGst)}</td></tr>
+  <tr><td class="c">Corpus Charges</td><td class="c">12</td><td class="c">${xl(c.corpus)}</td><td class="c">${xl(c.corpusGst)}</td><td class="c">${xl(corT)}</td><td class="c b">${xl(c.corpus + c.corpusGst)}</td></tr>
+  <tr class="tall"><td class="nb nbr tall" colspan="7"></td></tr>
+  <tr><td class="nb nbr" colspan="2" rowspan="8"></td><td class="pk c ar" colspan="5">BANKING DETAILS:</td></tr>
+  <tr><td class="c b ar" colspan="2" rowspan="2">NAME</td><td class="r ar wrap" colspan="3" rowspan="2">${esc(bank[0])}</td></tr>
+  <tr></tr>
+  <tr><td class="c b ar" colspan="2">ACCOUNT NUMBER</td><td class="r ar" colspan="3">${esc(bank[1])}</td></tr>
+  <tr><td class="c b ar" colspan="2">BANK</td><td class="r ar" colspan="3">${esc(bank[2])}</td></tr>
+  <tr><td class="c b ar" colspan="2">BRANCH</td><td class="r ar" colspan="3">${esc(bank[3])}</td></tr>
+  <tr><td class="c b ar" colspan="2">IFSC CODE</td><td class="r ar" colspan="3">${esc(bank[4])}</td></tr>
+  <tr><td class="nb nbr nbl" colspan="5"></td></tr>
+  <tr><td class="pk c ar">Terms and Conditions:</td><td class="pk ar" colspan="6"></td></tr>
+  <tr><td class="c ar" colspan="7">1. CAM charges are levied at the rate of Rs. ${p.camRate} per sq.ft of land per month for a period of 5 years payable at possession and it is a reccuring cost.</td></tr>
+  <tr><td class="c ar" colspan="7">2. Corpus charges are levied at the rate of Rs. ${p.camRate} per sq.ft of land per month for a period of 1 year payable at possession and&nbsp; it is not recurring.</td></tr>
+  <tr><td class="c ar" colspan="7">3. SDR is collected on agreement value</td></tr>
+  <tr><td class="nbr" style="border-top:0" colspan="2" rowspan="8"></td><td class="nb nbl" colspan="5"></td></tr>
+  <tr><td class="pk c ar" colspan="5">Details for TDS payment:</td></tr>
+  <tr><td class="c ar" colspan="2">Company Name:</td><td class="c ar" colspan="3">${co.name}</td></tr>
+  <tr><td class="c ar" colspan="2">PAN NUMBER:&nbsp;</td><td class="c ar" colspan="3">${co.pan}</td></tr>
+  <tr><td class="c ar" colspan="2">SITE ADDRESS:</td><td class="c ar wrap" colspan="3">${co.site}</td></tr>
+  <tr><td class="c ar" colspan="2" rowspan="3">OFFICE ADDRESS:</td><td class="c ar wrap" colspan="3" rowspan="3">${co.office}</td></tr>
+  <tr></tr><tr></tr>
+  </table></div>`;
+  $("pages").innerHTML = html;
+  fit();
+}
+
+function fit() { const w = $("pscale").clientWidth, k = Math.min(1, w / 794); const inner = $("pages"); inner.style.transform = `scale(${k})`; $("pscale").style.height = (inner.scrollHeight * k) + "px"; }
+window.addEventListener("resize", fit);
+
+// ---- download: only the price sheet ----
+function toast(t) { $("toast").textContent = t; clearTimeout(toast.t); toast.t = setTimeout(() => $("toast").textContent = "", 5000); }
+let DL = null; window.claude?.use?.("downloads")?.then(d => { DL = d; });
+$("dlPng").onclick = async e => {
+  if (!R) return;
+  const btn = e.target, label = btn.textContent; btn.disabled = true; btn.textContent = "Preparing…";
+  const holder = document.createElement("div");
+  holder.style.cssText = "position:fixed;left:-10000px;top:0;width:794px";
+  holder.innerHTML = $("pages").innerHTML; document.body.appendChild(holder);
+  try {
+    const pg = holder.querySelector(".page"); pg.style.boxShadow = "none";
+    const canvas = await html2canvas(pg, { scale: 2, backgroundColor: "#ffffff", logging: false });
+    const blob = await new Promise(r => canvas.toBlob(r, "image/png"));
+    const name = `${CONFIG.projects[R.p.project].name} ${R.p.plot} Price Sheet.png`;
+    if (DL) { await DL.save({ filename: name, data: blob }); }
+    else { const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000); }
+    toast("Saved " + name);
+  } catch (err) { toast(err && err.code === "declined" ? "Download cancelled." : "Couldn't create the image. Try again."); }
+  finally { holder.remove(); btn.disabled = false; btn.textContent = label; }
+};
+
+renderList();
+pick($("list").querySelector("[data-id]").dataset.id);
+
+</script>
+</body>
+</html>
